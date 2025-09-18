@@ -304,14 +304,21 @@ auto_shutdown_thread = threading.Thread(target=auto_shutdown_check, daemon=True)
 auto_shutdown_thread.start()
 
 if __name__ == '__main__':	
-    print("----------------------------------------------------")
-    print("读取系统的 Proxmox 相关配置：")
-    print(f"host        = {app.config['PVE_HOST']}")
-    print(f"user        = {app.config['PVE_USER']}")
-    print(f"token_name  = {app.config['PVE_TOKEN_NAME']}")
-    print(f"token_value = {app.config['PVE_TOKEN_VALUE']}")
-    print(f"verify_ssl  = {app.config['PVE_VERIFY_SSL']}")
-    print("----------------------------------------------------")
+#
+#    from flask import Flask
+#    from config import Config
+#
+#    app = Flask(__name__)
+#    app.config.from_object(Config)  # 一定要加载 Config
+#    
+#    print("----------------------------------------------------")
+#    print("读取系统的 Proxmox 相关配置：")
+#    print(f"host        = {app.config['PVE_HOST']}")
+#    print(f"user        = {app.config['PVE_USER']}")
+#    print(f"token_name  = {app.config['PVE_TOKEN_NAME']}")
+#    print(f"token_value = {app.config['PVE_TOKEN_VALUE']}")
+#    print(f"verify_ssl  = {app.config['PVE_VERIFY_SSL']}")
+#    print("----------------------------------------------------")
     app.run(debug=True, host='0.0.0.0', port=8920)
 
     
