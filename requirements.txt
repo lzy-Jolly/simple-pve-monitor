@@ -2,3 +2,4 @@ proxmoxer
 flask
 flask_cors
 dotenv
+config
