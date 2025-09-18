@@ -1,6 +1,4 @@
 proxmoxer
-traceback
 flask
 flask_cors
-json
 dotenv
