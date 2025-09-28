@@ -1,6 +1,6 @@
 import requests
 import json
-
+# 备份，基础的pve api 测试脚本
 def test_api():
     base_url = "http://localhost:5000"
     

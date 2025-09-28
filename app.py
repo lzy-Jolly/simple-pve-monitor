@@ -89,71 +89,81 @@ def get_node_info():
         return jsonify({"error": str(e)}), 500
 
 @app.route('/api/vms')
+# 内存正常显示版本
 def get_vms():
     try:
         logger.debug("获取虚拟机列表")
         prox = get_proxmox_connection()
         nodes = prox.nodes.get()
+
         if not nodes:
             return jsonify({"error": "No nodes found"}), 404
-        
-        vms_list = []
+
         node_name = nodes[0]['node']
         vms = prox.nodes(node_name).qemu.get()
         logger.debug(f"获取到虚拟机: {vms}")
-        
 
+        vms_list = []
 
         for vm in vms:
             vmid = vm.get('vmid')
-            status = vm.get('status')
-            # 如果开启的服务的时候pve已经有running的VM了，自动执行一次重置时间
-            if status == 'running' and vmid not in auto_shutdown_times:
+            name = vm.get('name', f"VM {vmid}")
+            status_vm = vm.get('status', 'unknown')
+
+            # =========================
+            # 自动设置运行中的VM关机时间
+            # =========================
+            if status_vm == 'running' and vmid not in auto_shutdown_times:
                 uptime_seconds = vm.get('uptime', 0)
                 uptime_hours = uptime_seconds / 3600
                 current_time = time.time()
-                
+
                 if uptime_hours < 6:
                     new_delay = 6
                 else:
-                    hours_ceil = int(uptime_hours) + 1
-                    new_delay = hours_ceil + 10/60
-                
+                    new_delay = int(uptime_hours) + 1 + 10/60
+
                 auto_shutdown_times[vmid] = {
                     "auto_shutdown_time": current_time - uptime_seconds + new_delay * 3600,
                     "auto_shutdown_delay": new_delay
                 }
                 logger.info(f"服务启动后首次检测到运行中的VM {vmid}，自动设置其关机时间为 {new_delay:.2f} 小时后。")
-            status = vm.get('status')
 
-
+            # =========================
             # 计算运行时间
+            # =========================
             uptime_seconds = vm.get('uptime', 0)
             uptime_hours = uptime_seconds // 3600
             uptime_minutes = (uptime_seconds % 3600) // 60
-            
-            # 计算内存使用率
-            max_mem = vm.get('maxmem', 0)
-            mem_usage = vm.get('mem', 0)
+
+            # =========================
+            # 获取实时内存状态（status.current）
+            # =========================
+            status_current = prox.nodes(node_name).qemu(vmid).status.current.get()
+            mem_usage = status_current.get("mem", 0)
+            max_mem = status_current.get("maxmem", 0)
             mem_percent = round((mem_usage / max_mem) * 100, 1) if max_mem > 0 else 0
-            
-            # 获取自动关机信息
-            vmid = vm.get('vmid')
+
+            # =========================
+            # 自动关机信息
+            # =========================
             auto_shutdown_info = auto_shutdown_times.get(vmid, {})
             auto_shutdown_time = auto_shutdown_info.get('auto_shutdown_time')
             auto_shutdown_delay = auto_shutdown_info.get('auto_shutdown_delay', 6)  # 默认6小时
-            
-            # 格式化自动关机时间
+
             auto_shutdown_formatted = ""
             if auto_shutdown_time:
                 # 转换为北京时间 (UTC+8)
                 beijing_time = datetime.fromtimestamp(auto_shutdown_time) + timedelta(hours=8)
                 auto_shutdown_formatted = beijing_time.strftime("%Y-%m-%d %H:%M")
-            
+
+            # =========================
+            # 构建 VM 信息
+            # =========================
             vms_list.append({
                 "vmid": vmid,
-                "name": vm.get('name', f"VM {vmid}"),
-                "status": vm.get('status', 'unknown'),
+                "name": name,
+                "status": status_vm,
                 "cpu_usage": round(vm.get('cpu', 0) * 100, 1),
                 "cpus": vm.get('cpus', 0),
                 "mem_usage": mem_usage,
@@ -169,12 +179,102 @@ def get_vms():
                 "auto_shutdown_formatted": auto_shutdown_formatted,
                 "auto_shutdown_delay": auto_shutdown_delay
             })
-        
+
         logger.debug(f"虚拟机列表响应: {len(vms_list)} 个VM")
         return jsonify(vms_list)
+
     except Exception as e:
         logger.error(f"获取虚拟机列表错误: {e}")
         return jsonify({"error": str(e)}), 500
+
+
+
+# def get_vms():# 原本内存错误版本
+#     try:
+#         logger.debug("获取虚拟机列表")
+#         prox = get_proxmox_connection()
+#         nodes = prox.nodes.get()
+#         if not nodes:
+#             return jsonify({"error": "No nodes found"}), 404
+        
+#         vms_list = []
+#         node_name = nodes[0]['node']
+#         vms = prox.nodes(node_name).qemu.get()
+#         logger.debug(f"获取到虚拟机: {vms}")
+        
+
+
+#         for vm in vms:
+#             vmid = vm.get('vmid')
+#             status = vm.get('status')
+#             # 如果开启的服务的时候pve已经有running的VM了，自动执行一次重置时间
+#             if status == 'running' and vmid not in auto_shutdown_times:
+#                 uptime_seconds = vm.get('uptime', 0)
+#                 uptime_hours = uptime_seconds / 3600
+#                 current_time = time.time()
+                
+#                 if uptime_hours < 6:
+#                     new_delay = 6
+#                 else:
+#                     hours_ceil = int(uptime_hours) + 1
+#                     new_delay = hours_ceil + 10/60
+                
+#                 auto_shutdown_times[vmid] = {
+#                     "auto_shutdown_time": current_time - uptime_seconds + new_delay * 3600,
+#                     "auto_shutdown_delay": new_delay
+#                 }
+#                 logger.info(f"服务启动后首次检测到运行中的VM {vmid}，自动设置其关机时间为 {new_delay:.2f} 小时后。")
+#             status = vm.get('status')
+
+
+#             # 计算运行时间
+#             uptime_seconds = vm.get('uptime', 0)
+#             uptime_hours = uptime_seconds // 3600
+#             uptime_minutes = (uptime_seconds % 3600) // 60
+            
+#             # 计算内存使用率
+#             max_mem = vm.get('maxmem', 0)
+#             mem_usage = vm.get('mem', 0)
+#             mem_percent = round((mem_usage / max_mem) * 100, 1) if max_mem > 0 else 0
+            
+#             # 获取自动关机信息
+#             vmid = vm.get('vmid')
+#             auto_shutdown_info = auto_shutdown_times.get(vmid, {})
+#             auto_shutdown_time = auto_shutdown_info.get('auto_shutdown_time')
+#             auto_shutdown_delay = auto_shutdown_info.get('auto_shutdown_delay', 6)  # 默认6小时
+            
+#             # 格式化自动关机时间
+#             auto_shutdown_formatted = ""
+#             if auto_shutdown_time:
+#                 # 转换为北京时间 (UTC+8)
+#                 beijing_time = datetime.fromtimestamp(auto_shutdown_time) + timedelta(hours=8)
+#                 auto_shutdown_formatted = beijing_time.strftime("%Y-%m-%d %H:%M")
+            
+#             vms_list.append({
+#                 "vmid": vmid,
+#                 "name": vm.get('name', f"VM {vmid}"),
+#                 "status": vm.get('status', 'unknown'),
+#                 "cpu_usage": round(vm.get('cpu', 0) * 100, 1),
+#                 "cpus": vm.get('cpus', 0),
+#                 "mem_usage": mem_usage,
+#                 "max_mem": max_mem,
+#                 "mem_percent": mem_percent,
+#                 "disk_usage": vm.get('disk', 0),
+#                 "max_disk": vm.get('maxdisk', 0),
+#                 "netin": vm.get('netin', 0),
+#                 "netout": vm.get('netout', 0),
+#                 "uptime": uptime_seconds,
+#                 "uptime_formatted": f"{uptime_hours}h {uptime_minutes}m",
+#                 "auto_shutdown_time": auto_shutdown_time,
+#                 "auto_shutdown_formatted": auto_shutdown_formatted,
+#                 "auto_shutdown_delay": auto_shutdown_delay
+#             })
+        
+#         logger.debug(f"虚拟机列表响应: {len(vms_list)} 个VM")
+#         return jsonify(vms_list)
+#     except Exception as e:
+#         logger.error(f"获取虚拟机列表错误: {e}")
+#         return jsonify({"error": str(e)}), 500
 
 @app.route('/api/vm/<int:vmid>/<action>', methods=['POST'])
 def vm_action(vmid, action):
@@ -321,4 +421,42 @@ if __name__ == '__main__':
 #    print("----------------------------------------------------")
     app.run(debug=True, host='0.0.0.0', port=8920)
 
+    
+
+    # 测试节点内存使用情况
+    # with app.app_context():
+    #     prox = get_proxmox_connection()
+    #     nodes = prox.nodes.get()
+
+    #     if not nodes:
+    #         print("❌ 没有找到节点")
+    #     else:
+    #         node_name = nodes[0]['node']
+    #         vms = prox.nodes(node_name).qemu.get()
+
+    #         for vm in vms:
+    #             vmid = vm['vmid']
+    #             name = vm['name']
+
+    #             # 获取实时状态
+    #             status = prox.nodes(node_name).qemu(vmid).status.current.get()
+
+    #             # 只提取 blockstat 同级的 mem 和 maxmem
+    #             mem = status.get("mem", 0)
+    #             maxmem = status.get("maxmem", 0)
+
+    #             # 转换单位为 MB 或 GB
+    #             def format_size(bytes_value):
+    #                 gb = bytes_value / (1024**3)
+    #                 if gb >= 1:
+    #                     return f"{gb:.2f}GB"
+    #                 else:
+    #                     mb = bytes_value / (1024**2)
+    #                     return f"{mb:.2f}MB"
+
+    #             mem_str = format_size(mem)
+    #             maxmem_str = format_size(maxmem)
+    #             print("------------------------------------")    
+    #             print(f"VM {vmid} ({name}): {mem_str}:{maxmem_str}")
+    #             print("------------------------------------") 
     
